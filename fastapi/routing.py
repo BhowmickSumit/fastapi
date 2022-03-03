@@ -1,9 +1,9 @@
 import asyncio
 import dataclasses
 import email.message
-import enum
 import inspect
 import json
+from enum import Enum, IntEnum
 from typing import (
     Any,
     Callable,
@@ -13,6 +13,7 @@ from typing import (
     Optional,
     Sequence,
     Set,
+    Tuple,
     Type,
     Union,
 )
@@ -44,7 +45,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
-from starlette.routing import BaseRoute
+from starlette.routing import BaseRoute, Match
 from starlette.routing import Mount as Mount  # noqa
 from starlette.routing import (
     compile_path,
@@ -53,7 +54,7 @@ from starlette.routing import (
     websocket_session,
 )
 from starlette.status import WS_1008_POLICY_VIOLATION
-from starlette.types import ASGIApp
+from starlette.types import ASGIApp, Scope
 from starlette.websockets import WebSocket
 
 
@@ -296,6 +297,12 @@ class APIWebSocketRoute(routing.WebSocketRoute):
         )
         self.path_regex, self.path_format, self.param_convertors = compile_path(path)
 
+    def matches(self, scope: Scope) -> Tuple[Match, Scope]:
+        match, child_scope = super().matches(scope)
+        if match != Match.NONE:
+            child_scope["route"] = self
+        return match, child_scope
+
 
 class APIRoute(routing.Route):
     def __init__(
@@ -305,7 +312,7 @@ class APIRoute(routing.Route):
         *,
         response_model: Optional[Type[Any]] = None,
         status_code: Optional[int] = None,
-        tags: Optional[List[str]] = None,
+        tags: Optional[List[Union[str, Enum]]] = None,
         dependencies: Optional[Sequence[params.Depends]] = None,
         summary: Optional[str] = None,
         description: Optional[str] = None,
@@ -330,7 +337,7 @@ class APIRoute(routing.Route):
         openapi_extra: Optional[Dict[str, Any]] = None,
     ) -> None:
         # normalise enums e.g. http.HTTPStatus
-        if isinstance(status_code, enum.IntEnum):
+        if isinstance(status_code, IntEnum):
             status_code = int(status_code)
         self.path = path
         self.endpoint = endpoint
@@ -432,13 +439,19 @@ class APIRoute(routing.Route):
             dependency_overrides_provider=self.dependency_overrides_provider,
         )
 
+    def matches(self, scope: Scope) -> Tuple[Match, Scope]:
+        match, child_scope = super().matches(scope)
+        if match != Match.NONE:
+            child_scope["route"] = self
+        return match, child_scope
+
 
 class APIRouter(routing.Router):
     def __init__(
         self,
         *,
         prefix: str = "",
-        tags: Optional[List[str]] = None,
+        tags: Optional[List[Union[str, Enum]]] = None,
         dependencies: Optional[Sequence[params.Depends]] = None,
         default_response_class: Type[Response] = Default(JSONResponse),
         responses: Optional[Dict[Union[int, str], Dict[str, Any]]] = None,
@@ -466,7 +479,7 @@ class APIRouter(routing.Router):
                 "/"
             ), "A path prefix must not end with '/', as the routes will start with '/'"
         self.prefix = prefix
-        self.tags: List[str] = tags or []
+        self.tags: List[Union[str, Enum]] = tags or []
         self.dependencies = list(dependencies or []) or []
         self.deprecated = deprecated
         self.include_in_schema = include_in_schema
@@ -483,7 +496,7 @@ class APIRouter(routing.Router):
         *,
         response_model: Optional[Type[Any]] = None,
         status_code: Optional[int] = None,
-        tags: Optional[List[str]] = None,
+        tags: Optional[List[Union[str, Enum]]] = None,
         dependencies: Optional[Sequence[params.Depends]] = None,
         summary: Optional[str] = None,
         description: Optional[str] = None,
@@ -557,7 +570,7 @@ class APIRouter(routing.Router):
         *,
         response_model: Optional[Type[Any]] = None,
         status_code: Optional[int] = None,
-        tags: Optional[List[str]] = None,
+        tags: Optional[List[Union[str, Enum]]] = None,
         dependencies: Optional[Sequence[params.Depends]] = None,
         summary: Optional[str] = None,
         description: Optional[str] = None,
@@ -634,7 +647,7 @@ class APIRouter(routing.Router):
         router: "APIRouter",
         *,
         prefix: str = "",
-        tags: Optional[List[str]] = None,
+        tags: Optional[List[Union[str, Enum]]] = None,
         dependencies: Optional[Sequence[params.Depends]] = None,
         default_response_class: Type[Response] = Default(JSONResponse),
         responses: Optional[Dict[Union[int, str], Dict[str, Any]]] = None,
@@ -738,7 +751,7 @@ class APIRouter(routing.Router):
         *,
         response_model: Optional[Type[Any]] = None,
         status_code: Optional[int] = None,
-        tags: Optional[List[str]] = None,
+        tags: Optional[List[Union[str, Enum]]] = None,
         dependencies: Optional[Sequence[params.Depends]] = None,
         summary: Optional[str] = None,
         description: Optional[str] = None,
@@ -790,7 +803,7 @@ class APIRouter(routing.Router):
         *,
         response_model: Optional[Type[Any]] = None,
         status_code: Optional[int] = None,
-        tags: Optional[List[str]] = None,
+        tags: Optional[List[Union[str, Enum]]] = None,
         dependencies: Optional[Sequence[params.Depends]] = None,
         summary: Optional[str] = None,
         description: Optional[str] = None,
@@ -842,7 +855,7 @@ class APIRouter(routing.Router):
         *,
         response_model: Optional[Type[Any]] = None,
         status_code: Optional[int] = None,
-        tags: Optional[List[str]] = None,
+        tags: Optional[List[Union[str, Enum]]] = None,
         dependencies: Optional[Sequence[params.Depends]] = None,
         summary: Optional[str] = None,
         description: Optional[str] = None,
@@ -894,7 +907,7 @@ class APIRouter(routing.Router):
         *,
         response_model: Optional[Type[Any]] = None,
         status_code: Optional[int] = None,
-        tags: Optional[List[str]] = None,
+        tags: Optional[List[Union[str, Enum]]] = None,
         dependencies: Optional[Sequence[params.Depends]] = None,
         summary: Optional[str] = None,
         description: Optional[str] = None,
@@ -946,7 +959,7 @@ class APIRouter(routing.Router):
         *,
         response_model: Optional[Type[Any]] = None,
         status_code: Optional[int] = None,
-        tags: Optional[List[str]] = None,
+        tags: Optional[List[Union[str, Enum]]] = None,
         dependencies: Optional[Sequence[params.Depends]] = None,
         summary: Optional[str] = None,
         description: Optional[str] = None,
@@ -998,7 +1011,7 @@ class APIRouter(routing.Router):
         *,
         response_model: Optional[Type[Any]] = None,
         status_code: Optional[int] = None,
-        tags: Optional[List[str]] = None,
+        tags: Optional[List[Union[str, Enum]]] = None,
         dependencies: Optional[Sequence[params.Depends]] = None,
         summary: Optional[str] = None,
         description: Optional[str] = None,
@@ -1050,7 +1063,7 @@ class APIRouter(routing.Router):
         *,
         response_model: Optional[Type[Any]] = None,
         status_code: Optional[int] = None,
-        tags: Optional[List[str]] = None,
+        tags: Optional[List[Union[str, Enum]]] = None,
         dependencies: Optional[Sequence[params.Depends]] = None,
         summary: Optional[str] = None,
         description: Optional[str] = None,
@@ -1102,7 +1115,7 @@ class APIRouter(routing.Router):
         *,
         response_model: Optional[Type[Any]] = None,
         status_code: Optional[int] = None,
-        tags: Optional[List[str]] = None,
+        tags: Optional[List[Union[str, Enum]]] = None,
         dependencies: Optional[Sequence[params.Depends]] = None,
         summary: Optional[str] = None,
         description: Optional[str] = None,
